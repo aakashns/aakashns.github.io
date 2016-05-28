@@ -1,0 +1,80 @@
+---
+layout: post
+title:  "Simple Typed Maps"
+date:   2015-06-16 04:10:00
+categories: scala
+permalink: typed-map.html
+comments: true
+---
+
+
+If you've ever wanted to store and access values of different types using an ordinary `Map`, here's what you need :
+
+
+{% gist aakashns/2d4c3076f7d423d57e40 typedMap.scala %}
+
+
+It's just 20 lines of code, with no dependencies. You can drop it into your project and start using it right away. Don't worry if the code doesn't make sense, we'll go over the implementation in detail later. But let's try it out first, starting with a `Key` (you might want to follow along in a REPL of your own) :
+
+{% gist aakashns/1b840ca405d9cfa0a87d import.scala %}
+
+In the key `k1`, apart from the string `"a"`, we're also storing information about the type of value it will point to in the `Map` using a `TypeTag`. You can learn about `TypeTag`s and type erasure [here][type-tags], but the basic idea is that they let you work with types at runtime.
+
+`Key` is a simple case class, except that the `equals` method is overridden to compare the underlying key as well as the value type correctly (you can't compare `TypeTag`s using `==`). Let's try to create a `Map` using `k1` :
+
+{% gist aakashns/1b840ca405d9cfa0a87d pairOperator.scala %}
+
+Surprise! It doesn't compile. Why is that? Well, the `->` operator in scala is not a primitive. It is implemented by means of an [implicit class][arrow-implicit-class], and creates a `Tuple2` of the arguments around it. We would like to exercise some control over the type of values a `Key` can be paired with, so we have *disabled* the implicit `->` operator by defining it as a method on `Key`. This method returns `None`, which cannot be provided as a constructor argument to `Map`.
+
+To pair a `Key` with a value, we shall use the type safe arrow method `~>` :
+
+{% gist aakashns/1b840ca405d9cfa0a87d tildaFail.scala %}
+
+Since `k1` is of type `Key[String, Int]`, `~>` expects an `Int`, and compilation fails if we try to give it anything else. Let's create a valid `Map` and try to access the value stored in it :
+
+{% gist aakashns/1b840ca405d9cfa0a87d tildaCreate.scala %}
+
+We were able ensure that `k1` points an `Int` value, but when we try to access it, we get back a value of type `Any`, which is no good! Let's fix this using `TypedMap`, which is a wrapper around `Map` that lets you get back values with the right types :
+
+{% gist aakashns/1b840ca405d9cfa0a87d typedMapCreated.scala %}
+
+Voila! The value we get out of the map `m` using `k1` magically has the right type (we're casting it under the hood, but let's keep that between us). Here's a map with different types of values :
+
+{% gist aakashns/1b840ca405d9cfa0a87d typedMapMultiple.scala %}
+
+We can recover each of the values with the right type using just the keys :
+
+{% gist aakashns/1b840ca405d9cfa0a87d typedMapMultipleUsed.scala %}
+
+And we can work with keys that aren't present in the map just as easily :
+
+{% gist aakashns/1b840ca405d9cfa0a87d typedMapMultipleAbsent.scala %}
+
+At this point, you might want to scroll back up all the way and go through the implementation of `Key` and `TypedMap`, and it should make a lot more sense. Now you can use a `Map` just like you would a [case class][case-classes] or a tuple. Or you could just use a case class, right? Well, case classes and tuples are great, except when they're a huge pain the ass. Specifically :
+
+1. Tuple elements have to be accessed as `._1` , `._2` etc., which is just plain ugly. Case classes solve this by letting you name the elements. `TypedMap`s let you use pretty much anything as a key, and you can decide which ones to use at runtime.
+
+2. You cannot build a tuple or a case class in steps, you have to build it all in one go. You might wrap the elements in `Option`s, but then you find yourself calling `.get` (or pattern matching) all over the place. `TypedMap`s can be built in steps by adding key-value pairs one by one.
+
+3. Case classes and tuples are unbelievably rigid, to the point that it is annoying. They don't compose at all! You can't concatenate tuples, and if you want to combine case classes you will have to write a ton of boilerplate to do it. `TypedMap`s are ordinary `Map`s, so you can combine them quite easily.
+
+4. Sometimes you need a traditional `Map` i.e. a set of key-value pairs, with keys and values that can be passed around independently and used across multiple maps. A case class is simply too restrictive in such situations.
+
+While `TypedMap` and `Key` are good to use as defined above, there's bit of boilerplate involved in using them. Let's define some helper classes to help clean up the syntax :
+
+{% gist aakashns/2d4c3076f7d423d57e40 TypedMapSyntax.scala %}
+
+With the help of these implicit classes, it becomes much easier to create and use `TypedMap`s :
+
+{% gist aakashns/1b840ca405d9cfa0a87d typedMapPretty.scala %}
+
+That's pretty much it! Feel free to use it, but keep in mind that this is a simple (albeit functional) implementation and has several shortcomings. For instance, you can ask for a key that doesn't exist and it will blow up at runtime, like an ordinary `Map` would. Also, since you have access to the underlying `Map`, you can call methods like `.map`, `.flatMap` etc. on it and totally mess up the whole thing and get all kinds of runtime exceptions. This can be avoided by making the underlying `Map` private and exposing only a limited set of methods on `TypedMap`. If you need better compile time safety and more features, you should check out [scala records][scala-records] or [shapeless records][shapeless-records]. I would suggest that you use case classes whenever you can, but when you find that your head hurts trying to do what you want, use `TypedMap`s (or something similar). Here's the full implementation ([raw][typed-map-raw]) :
+
+{% gist aakashns/2d4c3076f7d423d57e40 typedMapFull.scala %}
+
+[shapeless-records]: https://github.com/milessabin/shapeless/blob/master/examples/src/main/scala/shapeless/examples/records.scala
+[scala-records]: https://github.com/scala-records/scala-records
+[arrow-implicit-class]: https://github.com/scala/scala/blob/v2.11.6/src/library/scala/Predef.scala#L247
+[type-tags]: http://docs.scala-lang.org/overviews/reflection/typetags-manifests.html
+[case-classes]: http://docs.scala-lang.org/tutorials/tour/case-classes.html
+[typed-map-raw]: https://gist.githubusercontent.com/aakashns/2d4c3076f7d423d57e40/raw/5ae7c25a64d3bb941b163786913abd5a3e9e08f1/typedMapFull.scala

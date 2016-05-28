@@ -1,0 +1,11 @@
+# Site settings
+title: Functional Programming etc.
+description: > # this means to ignore newlines until "baseurl:"
+  Posts about Scala etc.
+baseurl: "" # the subpath of your site, e.g. /blog/
+url: "http://aakashns.github.io" # the base hostname & protocol for your site
+twitter_username: aakashns
+github_username:  aakashns
+
+# Build settings
+markdown: kramdown
